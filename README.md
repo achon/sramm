@@ -134,8 +134,6 @@ ERR174324.5	(99, 101)	1	60	0.9901,1.0,0.0099
 $ python3 sramm.py stats bwa_10k_pe.bam -filter_flag=True -graphs_flag=True -map_range=0.9,1.0
 ```
 This filters for reads that have a mapping score of at least 90% for the primary alignment based upon AS.  It generates a filtered stats file, `sramm_output_filt.txt`.  Lastly, it generates the 3 graphs and graph data file, `graphs_hist_data.txt`.
-![SRAMM](composite_10M.jpg)
-<img src="composite_10M.jpg" alt="drawing" width="200"/>
 
 ### Using filtered reads
 Once you have filtered your reads based upon your desired criteria, you can employ any number of methods to filter the reads for the next step of your analysis.
