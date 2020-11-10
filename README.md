@@ -21,13 +21,17 @@
     - Mapped Identity (MI)
     - Unique Repeat (UR)
     - UnMapped (UM)
-- Fast and efficient: Uses 2 threads and < 1GB RAM.
+- Fast and efficient: Uses 2+ threads and < 1GB RAM.
 - Compute statistics, filter, and generate graphs for the alignments of 10M reads in less than 7 minutes.
-- Combinations of different concept based mapping metrics allows for unambiguous filtering.
+- Can be parallelized at the program (increasing number of CPUs) or at the data level (splitting data).
+- Combinations of different concept based mapping metrics allows for unambiguous filtering for various downstream analyses.
+- Additionally works with [VariantGraph](https://github.com/vgteam/vg).  Ideal if population variant information is available. 
 
 ## Drawbacks
-- I/O bottleneck:  Due to system caches/buffers and disk speed, increasing number of threads does not improve performance.
+- I/O bottleneck: Due to system caches/buffers and disk speed, increasing number of threads does not necessarily improve performance.
+- I/O component and parsing BAM entries vastly outweighs calculations resulting in a flat run time dependent upon number of reads. 
 - Relies on 'AS' tags which not all read aligners output.
+- 'AS' tag is heavily aligner dependent and thus SRAMM metric distributions may differ based upon alignment tool used. 
 
 ## Installation
 Dependency requirements:
@@ -146,6 +150,15 @@ You can then use samtools, picard, or a script to filter your BAM file.
 
 And then continue your analysis with your filtered BAM file.
 
+### VariantGraph output
+Variant Graph does not natively report 'AS' tags in their BAM files.  There is a 'refpos-table' output option using the '-v' flag that SRAMM has a parser for:
+
+`vg map -v ...`
+
+Then rename the file to have a .vg file extension that SRAMM will parse.
+
+`python3 sramm.py stats vg_10k_pe.vg` 
+
 
 ## Use Cases
 Below are some generalized use cases SRAMM was developed for.
@@ -168,11 +181,11 @@ If a given read pair has a set of perfect alignments to the reference in only on
 Most read aligners themselves will give an option to report all reads even if there's no alignment while others will simply not report the reads at all.  But, this reporting is based upon MAPQ and or alignment scores and there usually is an option to reduce the threshold and or report all alignments.  Then, by using UM scores, we can identity reads with a set of low alignment scores and or multiple alignments.  A user can identify the set of reads that have low MI scores, low UR scores, or directly high UM scores.  This can be used in combination with a read aligner's reporting threshold to select the set of reads to that do not map well according to user criteria.
 
 ## Reference
-> [SRAMM: additional short read mapping metrics for unambiguous filtering](https://ZZ), Chon and Huang, Bioinformatics, 2020 (submitted)
+> [SRAMM: additional short read mapping metrics for unambiguous filtering](https://ZZ), Chon and Huang, 2020 (submitted)
 
 ## License
 You are free to use the software in any way.  
 > [MIT license](http://opensource.org/licenses/mit-license.php)
 
-## Bug reports
+## Issues
 To report bugs, visit the [Issues](https://github.com/achon/SRAMM/issues) page.

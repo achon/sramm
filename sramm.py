@@ -16,6 +16,103 @@ from math import floor
 from multiprocessing import Pool
 
 
+def parse_vg_file(vg_file, ofh, end, num_reads, num_cpu):
+    """
+    Must be the VG output file from the -v option and look like this:
+    read_name   seq_name    pos mapq    alignment_score
+    ERR174324.2079  chr7    63592360        0       111
+    ERR174324.2079  chr5    39196216        0       60
+    ERR174324.2079          0       0       0
+    :param vg_file: vg debug output
+    :param ofh: output file handle
+    :param end: str, single of paired
+    :param num_reads: number of reads to process as a batch
+    :param num_cpu: number of CPUs to use in the pool
+    :return: data, obs_max
+    """
+    in_file = open(vg_file, 'r')
+    ctime = time.time()
+    pool = Pool(processes=num_cpu)
+    chunk_size = int(num_reads / num_cpu / 10)
+    prev_read_id = ""
+    obs_max = 0
+    counter_reads = 0
+    data = {}
+    mapq_data = {}
+    if end == "single":
+        for line in in_file:
+            line_parts = line.strip().split('\t')
+            if len(line_parts) == 5:
+                cur_read_id, seq_name, pos, mapq, score_aln = line_parts
+            else:
+                cur_read_id, seq_name, pos, mapq, score_aln = line_parts[0], "", 0, 0, 0
+            score_aln = int(score_aln)
+            if score_aln > obs_max:
+                obs_max = score_aln
+            if cur_read_id == prev_read_id:
+                data[cur_read_id] = data[cur_read_id] + [score_aln]
+                mapq_data[cur_read_id] = mapq_data[cur_read_id] + [mapq]
+            else:
+                counter_reads += 1
+                if counter_reads >= num_reads:
+                    # print('---Starting batch process: ', np.around(time.time() - ctime, 2))
+                    batch_single_calc(pool, chunk_size, ofh, data, mapq_data, obs_max, end)
+                    data.clear()
+                    mapq_data.clear()
+                    counter_reads = 0
+                data[cur_read_id] = [score_aln]
+                mapq_data[cur_read_id] = [mapq]
+                prev_read_id = cur_read_id
+        print('---Starting final read processing: ', np.around(time.time() - ctime, 2))
+        batch_single_calc(pool, chunk_size, ofh, data, mapq_data, obs_max, end)
+        pool.close()
+        pool.join()
+    elif end == "paired":
+        paired_index = -1
+        paired_scores = -1
+        paired_mapq = -1
+        for line in in_file:
+            line_parts = line.strip().split('\t')
+            if len(line_parts) == 5:
+                cur_read_id, seq_name, pos, mapq, score_aln = line_parts
+            else:
+                cur_read_id, seq_name, pos, mapq, score_aln = line_parts[0], "", 0, 0, 0
+            score_aln = int(score_aln)
+            if score_aln > obs_max:
+                obs_max = score_aln
+            if cur_read_id == prev_read_id:
+                if paired_index == 0:
+                    paired_scores = score_aln
+                    paired_mapq = mapq
+                    paired_index = 1
+                elif paired_index == 1:
+                    data[cur_read_id] = data[cur_read_id] + [(paired_scores, score_aln)]
+                    mapq_data[cur_read_id] = mapq_data[cur_read_id] + [paired_mapq]    # VG has both left and right alns in a pair share the same MAPQ
+                    paired_scores = -1
+                    paired_mapq = -1
+                    paired_index = 0
+                    # calc_scores((cur_read_id, data[cur_read_id], obs_max, end_type))
+            else:
+                counter_reads += 1
+                if counter_reads >= num_reads:
+                    # print('---Starting batch process: ', np.around(time.time() - ctime, 2))
+                    batch_paired_vg_calc(pool, chunk_size, ofh, data, mapq_data, obs_max, end)
+                    data.clear()
+                    mapq_data.clear()
+                    counter_reads = 0
+                paired_scores = score_aln
+                paired_mapq = mapq
+                paired_index = 1
+                prev_read_id = cur_read_id
+                data[cur_read_id] = []
+                mapq_data[cur_read_id] = []
+        print('---Starting final read processing: ', np.around(time.time() - ctime, 2))
+        batch_paired_vg_calc(pool, chunk_size, ofh, data, mapq_data, obs_max, end)
+        pool.close()
+        pool.join()
+    return obs_max
+
+
 def parse_alignment_file(input_file, ofh, end, num_reads, num_cpu):
     """
     Parses sam/bam/cram file.  File must be samtools sorted by QNAME using the -n option or with collate.
@@ -28,7 +125,7 @@ def parse_alignment_file(input_file, ofh, end, num_reads, num_cpu):
     """
     ctime = time.time()
     pool = Pool(processes=num_cpu)
-    chunk_size = int(num_reads / num_cpu)
+    chunk_size = int(num_reads / num_cpu / 10)
     batch = {}
     aln_data = {}  # paired only
     prev_read_id = ""
@@ -108,6 +205,16 @@ def batch_single_calc(pool, chunk_size, ofh, data, mapq_data, obs_max, end):
     return
 
 
+def batch_paired_vg_calc(pool, chunk_size, ofh, data, mapq_data, obs_max, end):
+    """
+    MP wrapper
+    """
+    for r in pool.imap_unordered(process_pairs_vg, [(k, v, mapq_data[k], obs_max, end) for k, v in data.items()],
+                                 chunksize=chunk_size):
+        write_stats_line(r, end, ofh)
+    return
+
+
 def batch_paired_calc(pool, chunk_size, ofh, batch, obs_max, end):
     """
     MP wrapper
@@ -129,6 +236,16 @@ def calc_scores(scores_tuple):
     uniq_rep_score = calc_unique_repeat_score(alignment_scores, obs_max, end)
     unmap_score = calc_unmapped_score(alignment_scores, obs_max, end)
     return read_id, map_score, uniq_rep_score, unmap_score
+
+
+def process_pairs_vg(alns_tuple):
+    """
+    Finds the pairs in alignments of one read
+    :param alns_tuple: alignments of one read in as a tuple
+    :return: read_id, AS pairs, mapq, metric scores
+    """
+    read_id, alignments, mapqs, obs_max, end = alns_tuple
+    return read_id, alignments, mapqs, calc_scores((read_id, alignments, obs_max, end))
 
 
 def process_pairs(alns_tuple):
@@ -485,7 +602,13 @@ def run_stats(input_file, output_file, end, num_reads, num_cpu, ftime):
     print('-STATS: ', np.around(time.time() - ftime, 2))
     print('--Starting parser: ', np.around(time.time() - ftime, 2))
     ofh = open(output_file, 'w')
-    parse_alignment_file(input_file, ofh, end, num_reads, num_cpu)
+    extension = input_file.split(".")[-1].lower()
+    if extension == "bam":
+        parse_alignment_file(input_file, ofh, end, num_reads, num_cpu)
+    elif extension == "vg":
+        parse_vg_file(input_file, ofh, end, num_reads, num_cpu)
+    else:
+        raise Exception('alignment file must be .bam for BAM format or .vg for VG refpos-table format')
     ofh.close()
     print('--Finished calculating stats: ', np.around(time.time() - ftime, 2))
     return
