@@ -15,6 +15,9 @@ import pysam
 from math import floor
 from multiprocessing import Pool
 
+# global
+output_prefix = ""
+
 
 def parse_vg_file(vg_file, ofh, end, num_reads, num_cpu):
     """
@@ -526,19 +529,20 @@ def generate_graphs(graph_data, mapq_max, num_score_bins):
     :return:
     """
     mapq_hist, mapped_hist, uniq_rep_hist, unmapped_hist = graph_data
-    ofh = open("graphs_hist_data.txt", 'w')
+    ofh = open(output_prefix + "graphs_hist_data.txt", 'w')
     ofh.write("mapq\t" + ",".join([str(int(v)) for v in mapq_hist]) + "\n")
     ofh.write("bin edges\t" + ",".join([str(np.around(v, 4)) for v in np.linspace(0, 1, num_score_bins + 1)]) + "\n")
     ofh.write("mapped_identity\t" + ",".join([str(int(v)) for v in mapped_hist]) + "\n")
     ofh.write("unique_repeat\t" + ",".join([str(int(v)) for v in uniq_rep_hist]) + "\n")
     ofh.write("unmapped\t" + ",".join([str(int(v)) for v in unmapped_hist]))
+    ofh.close()
     graph_mapq(mapq_hist, mapq_max)
     graph_score(mapped_hist, num_score_bins, 'Mapped Identity Score Distribution', 'Mapped Identity Score',
-                'Counts (log10)', 'graphs_mapped_score.png')
+                'Counts (log10)', output_prefix + 'graphs_mapped_score.png')
     graph_score(uniq_rep_hist, num_score_bins, 'Unique Repeat Score Distribution', 'Unique-Repeat Score',
-                'Counts (log10)', 'graphs_uniq_rep_score.png')
+                'Counts (log10)', output_prefix + 'graphs_uniq_rep_score.png')
     graph_score(unmapped_hist, num_score_bins, 'Unmapped Score Distribution', 'Unmapped Score',
-                'Counts (log10)', 'graphs_unmapped_score.png')
+                'Counts (log10)', output_prefix + 'graphs_unmapped_score.png')
     graph_subplots(mapq_hist, mapq_max, mapped_hist, uniq_rep_hist, unmapped_hist, num_score_bins)
     return
 
@@ -590,7 +594,7 @@ def graph_subplots(mapq_hist, mapq_max, mapped_hist, uniq_rep_hist, unmapped_his
     plt.hist([i / num_score_bins + 1 / (num_score_bins * 2) for i in range(num_score_bins)], bins=np.linspace(0, 1, num_score_bins + 1),
              weights=unmapped_hist, rwidth=0.7)
     plt.yscale('log', nonpositive='clip')
-    plt.savefig('graphs_subplots.png', dpi=600)
+    plt.savefig(output_prefix + 'graphs_subplots.png', dpi=600)
     plt.close()
     return
 
@@ -615,7 +619,7 @@ def graph_mapq(scores, mapq_max):
     plt.ylabel(ylabel)
     plt.hist([i for i in range(mapq_max)], bins=np.linspace(0, mapq_max, mapq_max + 1), weights=scores, rwidth=0.8)
     plt.yscale('log', nonpositive='clip')
-    plt.savefig('graphs_mapq.png', dpi=600)
+    plt.savefig(output_prefix + 'graphs_mapq.png', dpi=600)
     plt.close()
     return
 
@@ -675,12 +679,12 @@ def run_filter(input_file, output_file, num_reads, num_cpu, score_ranges, ftime)
     print('--Filtering stats: ', np.around(time.time() - ftime, 2))
     if output_file == input_file:
         output_file = output_file.split(".txt")[0] + "_filt.txt"
-        print("--Input and output are the same, new output file: {}".format(output_file))
-    ofh = open(output_file, 'w')
+        print("--Input and output are the same, new output file: {}".format(output_prefix + output_file))
+    ofh = open(output_prefix + output_file, 'w')
     filter_stats_wrapper(num_reads, num_cpu, score_ranges, input_file, ofh)
     ofh.close()
     print('--Finished filtering stats: ', np.around(time.time() - ftime, 2))
-    return output_file
+    return output_prefix + output_file
 
 
 def run_graphs(input_file, num_reads, num_cpu, mapq_max, num_score_bins, ftime):
@@ -698,10 +702,12 @@ def run_graphs(input_file, num_reads, num_cpu, mapq_max, num_score_bins, ftime):
 
 
 def main(args):
+    global output_prefix
     # Process input arguments
     process_type = args.process_type
     input_file = args.input_file
     output_file = args.output_file
+    output_prefix = args.output_prefix
     end = args.end
     num_reads = int(args.num_reads)
     num_cpu = int(args.num_cpu)
@@ -738,15 +744,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='SRAMM.py',
                                      usage='%(prog)s [options] process_type input_file',
                                      description='Short Read Alignment Mapping Metrics',
-                                     epilog='Visit XXX for more information.')
+                                     epilog='Visit https://github.com/achon/sramm for more information.')
     parser.add_argument("process_type", help="Process type: stats, filter, graphs")
     parser.add_argument("input_file", help="Input file, depends on process and input_type")
     parser.add_argument("-output_file", help="Output stat file, default=sramm_output.txt", default="sramm_output.txt")
+    parser.add_argument("-output_prefix", help="Output prefix for all files, default=''", type=str, default='')
     parser.add_argument("-end", help="single or paired end, default=paired", default="paired")
     parser.add_argument("-num_reads", help="Number of reads worth of alignments to keep in memory, default=10000",
                         default=10000)
     parser.add_argument("-num_cpu", help="Number of cpu, default=2", default=2)
     parser.add_argument("-graphs_flag", help="Generate graphs flag, default=False", default="False")
+
     parser.add_argument("-filter_flag", help="Filter flag, default=False", default="False")
     parser.add_argument("-mapq_max", help="Max MAPQ value in dataset, default=60", default=60)
     parser.add_argument("-score_num_bins", help="Number of bins for SRAMM scores for graphing", default=40)
@@ -762,4 +770,3 @@ if __name__ == "__main__":
     print(args)
     main(args)
 
-    # TODO: Revise comments and remove unneeded comment statements (debug time prints)

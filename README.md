@@ -53,7 +53,7 @@ Optionally you may need [samtools](https://github.com/samtools/samtools) and or 
 
 ## Usage
 SRAMM is intended as a command line utility and not a python package.
-Download or clone and run the self contained python file.
+Download or clone and run the self-contained python file.
 ```
 $ python3 sramm.py -h
 usage: SRAMM.py [options] process_type input_file
@@ -68,6 +68,8 @@ optional arguments:
   -h, --help            show this help message and exit
   -output_file OUTPUT_FILE
                         Output stat file, default=sramm_output.txt
+  -output_prefix OUTPUT_PREFIX
+                        Output prefix for all files, default=''
   -end END              single or paired end, default=paired
   -num_reads NUM_READS  Number of reads worth of alignments to keep in memory, default=10000
   -num_cpu NUM_CPU      Number of cpu, default=2
@@ -86,7 +88,7 @@ optional arguments:
   -num_alns_range NUM_ALNS_RANGE
                         Range of the number of alignments to filter (accept), default=0.0,100.0
 
-Visit https://www.github.com/achon/SRAMM/ for more information
+Visit https://github.com/achon/sramm for more information.
 ```
 
 ### Test files:
@@ -181,7 +183,7 @@ If a given read pair has a set of perfect alignments to the reference in only on
 Most read aligners themselves will give an option to report all reads even if there's no alignment while others will simply not report the reads at all.  But, this reporting is based upon MAPQ and or alignment scores and there usually is an option to reduce the threshold and or report all alignments.  Then, by using UM scores, we can identity reads with a set of low alignment scores and or multiple alignments.  A user can identify the set of reads that have low MI scores, low UR scores, or directly high UM scores.  This can be used in combination with a read aligner's reporting threshold to select the set of reads to that do not map well according to user criteria.
 
 ## Reference
-> [SRAMM: additional short read mapping metrics for unambiguous filtering](https://ZZ), Chon and Huang, 2021 (submitted)
+> [Chon, A. and Huang, X., 2021. Sramm: short read alignment mapping metrics. arXiv preprint arXiv:2107.02935. International Journal of Bioinformatics and Biosciences, 11(1), ½.](https://wireilla.com/ijbb/abstract/11221ijbb01.html)
 
 ## License
 You are free to use the software in any way.  
